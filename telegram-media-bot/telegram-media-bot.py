@@ -164,8 +164,8 @@ def process_reddit(connect_reddit, subreddits):
                 check_link(post)
 
 
-def process_twitter(connect_twitter, twitter_account):
-    with open('twitter.json', 'r') as twitter_data:
+def process_twitter(arg, connect_twitter, twitter_account):
+    with open('twitter_%s.json' % arg, 'r') as twitter_data:
         stored_data = dict()
         try:
             stored_data = json.load(twitter_data)
@@ -201,7 +201,7 @@ def process_twitter(connect_twitter, twitter_account):
             except:
                 # Twitter data has changed, creating new one
                 print('Twitter data has changed, creating new one')
-                os.remove('twitter.json')
+                os.remove('twitter_%s.json' % arg)
 
 
 if __name__ == '__main__':
@@ -228,7 +228,7 @@ if __name__ == '__main__':
             # Prepare API and files
             (script_path, media_file, lastlog, connect_twitter, connect_reddit) = posting_prepare(telegram, reddit, twitter, link_file)
 
-            process_twitter(connect_twitter, twitter['account_%s' % arg])
+            process_twitter(arg, connect_twitter, twitter['account_%s' % arg])
             process_reddit(connect_reddit, reddit['subs_%s' % arg])
 
             # Save Twitter-data
