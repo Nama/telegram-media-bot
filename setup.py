@@ -7,10 +7,6 @@ setup(
 
     install_requires=['tweepy>=3.5.0', 'praw<=3.6.0', 'requests>=2.12.3'],
 
-    package_data={
-        'telegram-media-bot': ['requirements.txt', 'config.json'],
-    },
-
     author='Murat Özel',
     description='Send pictures and videos from Twitter and Reddit to a Telegram-Chat',
     license='MIT',
