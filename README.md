@@ -1,7 +1,7 @@
 # Telegram Media Bot
 
 ## General
-Posts images and GIFs (rather soundless MP4s) to a specific Telegram chat from Twitter and Reddit.
+Posts images, videos and GIFs (soundless MP4s) to a specific Telegram chat from Twitter and Reddit.
 
 ### Functionality
 Images and most of the videos/GIFs are shown/played inline in the chats.  
