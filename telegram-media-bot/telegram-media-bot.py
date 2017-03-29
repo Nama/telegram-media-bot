@@ -149,9 +149,12 @@ def check_link(post):
                             return
                 send_link(post)
         elif 'gfycat.com' in post.url:
-            link = requests.get('https://gfycat.com/cajax/get%s' % parse.urlparse(post.url).path).json()['gfyItem']['mp4Url']
-            media_file = parse.urlparse(post.url).path
-            send_file('sendVideo', 'video', media_file + '.mp4', link, post.url)
+            try:
+                link = requests.get('https://gfycat.com/cajax/get%s' % parse.urlparse(post.url).path).json()['gfyItem']['mp4Url']
+                media_file = parse.urlparse(post.url).path
+                send_file('sendVideo', 'video', media_file + '.mp4', link, post.url)
+            except KeyError:
+                send_link(post)
         else:
             send_link(post)
 
