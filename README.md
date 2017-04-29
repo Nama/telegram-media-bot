@@ -7,7 +7,6 @@ Posts images, videos and GIFs (soundless MP4s) to a specific Telegram chat from 
 Images and most of the videos/GIFs are shown/played inline in the chats.  
 The source links are the caption of the medias. All sent links are saved in a file and every new media is checked if it was posted before (earlier runs, not actual one) and skips the file if it was posted.  
 You can set two Twitter accounts and two sets of Subreddits to define which to post. "one" or "two" as command line parameter.  
-Option to upload every single file to a FTP-Server.
 
 #### Twitter
 Creates the twitter-files and saves the IDs of the last posts of all your following accounts. On next run all the new posts since the saved IDs are posted and saves again the IDs of the last posts.

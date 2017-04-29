@@ -5,13 +5,16 @@ import os
 import praw
 import requests
 import tweepy
+import warnings
 
-from ftplib import FTP_TLS
 from sys import argv
 from time import sleep
 from time import strftime
 from urllib import parse
 from urllib import request
+
+# Deactivating the warnings of praw
+warnings.simplefilter('ignore')
 
 
 def config_load():
@@ -36,16 +39,8 @@ def config_load():
         twitter['account_one'] = config['twitter']['account_one']
         twitter['account_two'] = config['twitter']['account_two']
 
-        ftp = dict()
-        ftp['enabled'] = bool(config['ftp']['enabled'])
-        ftp['server'] = config['ftp']['server']
-        ftp['port'] = config['ftp']['port']
-        ftp['user'] = config['ftp']['user']
-        ftp['pw'] = config['ftp']['pw']
-        ftp['path'] = config['ftp']['path']
-
         link_file = 'links.txt'
-        return (telegram, reddit, twitter, ftp, link_file)
+        return (telegram, reddit, twitter, link_file)
 
 
 def posting_prepare(telegram, reddit, twitter, link_file):
@@ -84,23 +79,15 @@ def send_file(method, file, media_file, link, caption):
     f.write(request.urlopen(link).read())
     f.close()
     f = open(filename, 'rb')
-    response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], method), files={file: f}, params={'chat_id': telegram['chatid'], 'caption': caption})
+    response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], method), files={file: f}, params={'disable_notification': 'true', 'chat_id': telegram['chatid'], 'caption': caption})
     log = open(link_file, 'a')
     log.write(caption + '\n')
     log.close()
-
-    if ftp['enabled']:
-        ftp_con = FTP_TLS()
-        ftp_con.connect(host=ftp['server'], port=ftp['port'])
-        ftp_con.login(user=ftp['user'], passwd=ftp['pw'])
-        ftp_con.cwd(ftp['path'])
-        ftp_con.storbinary('STOR ' + filename, f)
-    f.close()
     os.remove(filename)
 
 
 def send_link(post):
-    response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], 'sendMessage'), params={'chat_id': telegram['chatid'], 'text': post.url})
+    response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], 'sendMessage'), params={'disable_notification': 'true', 'chat_id': telegram['chatid'], 'text': post.url})
     log = open(link_file, 'a')
     log.write(post.url + '\n')
     log.close()
@@ -112,28 +99,28 @@ def check_link(post):
             if post.url.endswith('jpg'):
                 link = post.url
                 media_file = parse.urlparse(post.url).path
-                send_file('sendPhoto', 'photo', media_file + '.jpg', link, link)
+                send_file('sendPhoto', 'photo', media_file + '.jpg', link, post.url)
             elif post.url.endswith('png'):
                 link = post.url
                 media_file = parse.urlparse(post.url).path
-                send_file('sendPhoto', 'photo', media_file + '.png', link, link)
+                send_file('sendPhoto', 'photo', media_file + '.png', link, post.url)
             else:
                 link = post.url.replace('gifv', 'mp4').replace('gif', 'mp4')
                 media_file = parse.urlparse(post.url).path
-                send_file('sendVideo', 'video', media_file + '.mp4', link, link)
+                send_file('sendVideo', 'video', media_file + '.mp4', link, post.url)
         elif 'imgur.com' in post.url:
             if post.url.endswith('jpg'):
                 link = post.url
                 media_file = parse.urlparse(post.url).path
-                send_file('sendPhoto', 'photo', media_file + '.jpg', link, link)
+                send_file('sendPhoto', 'photo', media_file + '.jpg', link, post.url)
             elif post.url.endswith('png'):
                 link = post.url
                 media_file = parse.urlparse(post.url).path
-                send_file('sendPhoto', 'photo', media_file + '.png', link, link)
+                send_file('sendPhoto', 'photo', media_file + '.png', link, post.url)
             elif post.url.endswith('mp4') or post.url.endswith('gifv'):
                 link = post.url.replace('gifv', 'mp4').replace('gif', 'mp4')
                 media_file = parse.urlparse(post.url).path
-                send_file('sendVideo', 'video', media_file + '.mp4', link, link)
+                send_file('sendVideo', 'video', media_file + '.mp4', link, post.url)
             else:
                 media_id = parse.urlparse(post.url)
                 links = (('https://i.imgur.com' + media_id.path + '.mp4', '.mp4'), ('https://i.imgur.com' + media_id.path + '.png', '.png'), ('https://i.imgur.com' + media_id.path + '.jpeg', '.jpeg'))
@@ -153,7 +140,7 @@ def check_link(post):
                 link = requests.get('https://gfycat.com/cajax/get%s' % parse.urlparse(post.url).path).json()['gfyItem']['mp4Url']
                 media_file = parse.urlparse(post.url).path
                 send_file('sendVideo', 'video', media_file + '.mp4', link, post.url)
-            except KeyError:
+            except:
                 send_link(post)
         else:
             send_link(post)
@@ -226,7 +213,7 @@ if __name__ == '__main__':
             arg = None
         if arg in ('one', 'two'):
             # Load config
-            (telegram, reddit, twitter, ftp, link_file) = config_load()
+            (telegram, reddit, twitter, link_file) = config_load()
 
             # Prepare API and files
             (script_path, media_file, lastlog, connect_twitter, connect_reddit) = posting_prepare(telegram, reddit, twitter, link_file)
@@ -238,7 +225,7 @@ if __name__ == '__main__':
             save_data(arg, twitter['account_%s' % arg])
         elif arg == 'twitter':
             # Load config
-            (telegram, reddit, twitter, ftp, link_file) = config_load()
+            (telegram, reddit, twitter, link_file) = config_load()
             (script_path, media_file, lastlog, connect_twitter, connect_reddit) = posting_prepare(telegram, reddit, twitter, link_file)
             save_data('one', twitter['account_one'])
             save_data('two', twitter['account_two'])
