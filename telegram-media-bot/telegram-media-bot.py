@@ -12,9 +12,12 @@ from time import sleep
 from time import strftime
 from urllib import parse
 from urllib import request
+from urllib.error import HTTPError
 
 # Deactivating the warnings of praw
 warnings.simplefilter('ignore')
+
+error_file = 'errors.txt'
 
 
 def config_load():
@@ -64,22 +67,32 @@ def posting_prepare(telegram, reddit, twitter, link_file):
     return (script_path, media_file, lastlog, connect_twitter, connect_reddit)
 
 
-def save_data(arg, twitter_account):
+def save_data(arg, twitter_account, retries=0):
     with open('twitter_%s.json' % arg, 'w') as twitter_data:
         stored_data = dict()
-        for user in connect_twitter.friends_ids(twitter_account):
-            tweet = connect_twitter.user_timeline(count=1, id=user)
-            stored_data[str(user)] = tweet[-1].id
-        json.dump(stored_data, twitter_data)
+        try:
+            for user in connect_twitter.friends_ids(twitter_account):
+                tweet = connect_twitter.user_timeline(count=1, id=user)
+                stored_data[str(user)] = tweet[-1].id
+            json.dump(stored_data, twitter_data)
+        except tweepy.TweepError:
+            sleep(10)
+            if retries < 5:
+                retries += 1
+                save_data(arg, twitter_account, retries)
 
 
 def send_file(method, file, media_file, link, caption):
     filename = media_file.replace('/', '')
     f = open(filename, 'wb')
-    f.write(request.urlopen(link).read())
+    try:
+        f.write(request.urlopen(link).read())
+    except HTTPError:
+        f.write(request.urlopen(link.replace('.mp4', '.gif')).read())
     f.close()
     f = open(filename, 'rb')
     response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], method), files={file: f}, params={'disable_notification': 'true', 'chat_id': telegram['chatid'], 'caption': caption})
+
     log = open(link_file, 'a')
     log.write(caption + '\n')
     log.close()
@@ -87,7 +100,12 @@ def send_file(method, file, media_file, link, caption):
 
 
 def send_link(post):
-    response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], 'sendMessage'), params={'disable_notification': 'true', 'chat_id': telegram['chatid'], 'text': post.url})
+    try:
+        response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], 'sendMessage'), params={'disable_notification': 'true', 'chat_id': telegram['chatid'], 'text': post.url})
+    except UnicodeEncodeError:
+        error = open(error_file, 'a')
+        error.write(caption + '\n')
+        error.close()
     log = open(link_file, 'a')
     log.write(post.url + '\n')
     log.close()
@@ -137,21 +155,28 @@ def check_link(post):
                 send_link(post)
         elif 'gfycat.com' in post.url:
             try:
-                link = requests.get('https://gfycat.com/cajax/get%s' % parse.urlparse(post.url).path).json()['gfyItem']['mp4Url']
-                media_file = parse.urlparse(post.url).path
-                send_file('sendVideo', 'video', media_file + '.mp4', link, post.url)
+                url = post.url.replace('gifs/detail/', '')
+                link = requests.get('https://gfycat.com/cajax/get%s' % parse.urlparse(url).path).json()['gfyItem']['mp4Url']
+                media_file = parse.urlparse(url).path
+                send_file('sendVideo', 'video', media_file + '.mp4', link, url)
             except:
                 send_link(post)
         else:
             send_link(post)
 
 
-def process_reddit(connect_reddit, subreddits):
+def process_reddit(connect_reddit, subreddits, retries=0):
     for sub, limit in dict(subreddits).items():
-        submissions = connect_reddit.get_subreddit(sub).get_hot(limit=limit)
-        for post in submissions:
-            if post.url not in lastlog:
-                check_link(post)
+        try:
+            submissions = connect_reddit.get_subreddit(sub).get_hot(limit=limit)
+            for post in submissions:
+                if post.url not in lastlog:
+                    check_link(post)
+        except requests.exceptions.HTTPError:
+            sleep(10)
+            if retries < 5:
+                retries += 1
+                process_reddit(connect_reddit, subreddits, retries)
 
 
 def process_twitter(arg, connect_twitter, twitter_account):
