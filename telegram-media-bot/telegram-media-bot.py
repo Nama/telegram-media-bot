@@ -9,7 +9,6 @@ import warnings
 
 from sys import argv
 from time import sleep
-from time import strftime
 from urllib import parse
 from urllib import request
 from urllib.error import HTTPError
@@ -82,7 +81,7 @@ def save_data(arg, twitter_account, retries=0):
                 save_data(arg, twitter_account, retries)
 
 
-def send_file(method, file, media_file, link, caption):
+def send_file(method, file, media_file, link, caption, url_clean, post=None):
     filename = media_file.replace('/', '')
     f = open(filename, 'wb')
     try:
@@ -91,74 +90,93 @@ def send_file(method, file, media_file, link, caption):
         f.write(request.urlopen(link.replace('.mp4', '.gif')).read())
     f.close()
     f = open(filename, 'rb')
-    response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], method), files={file: f}, params={'disable_notification': 'true', 'chat_id': telegram['chatid'], 'caption': caption})
-
-    log = open(link_file, 'a')
-    log.write(caption + '\n')
-    log.close()
-    os.remove(filename)
-
-
-def send_link(post):
+    if post:
+        text = '%s\n%s' % (post, url_clean)
+    else:
+        text = '%s\n%s' % (url_clean, link)
     try:
-        response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], 'sendMessage'), params={'disable_notification': 'true', 'chat_id': telegram['chatid'], 'text': post.url})
+        response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], method), files={file: f}, params={'parse_mode': 'HTML', 'disable_notification': 'true', 'chat_id': telegram['chatid'], 'caption':
+text})
+        log = open(link_file, 'a')
+        log.write(caption + '\n')
+        log.close()
+
+    except requests.exceptions.ConnectionError:
+        sleep(10)
+        if retries < 5:
+            retries += 1
+            send_link(post, retries)
+
+
+def send_link(post, retries=0):
+    log = open(link_file, 'a')
+    try:
+        log.write(post.url + '\n')
+    except UnicodeEncodeError:
+        log.write('EncodeError\n')
+    log.close()
+    try:
+        response = requests.post('%s%s/%s' % (telegram['link'], telegram['token'], 'sendMessage'), params={'parse_mode': 'HTML', 'disable_notification': 'true', 'chat_id': telegram['chatid'], 'text': '%s\n<a href="%s">Reddit</a>' % (post.url, post.permalink)})
     except UnicodeEncodeError:
         error = open(error_file, 'a')
         error.write(caption + '\n')
         error.close()
-    log = open(link_file, 'a')
-    log.write(post.url + '\n')
-    log.close()
+    except requests.exceptions.ConnectionError:
+        sleep(10)
+        if retries < 5:
+            retries += 1
+            send_link(post, retries)
 
 
 def check_link(post):
     if post.url not in lastlog:
+        url = post.url.split('?')[0]
         if 'i.imgur.com' in post.url:
-            if post.url.endswith('jpg'):
-                link = post.url
-                media_file = parse.urlparse(post.url).path
-                send_file('sendPhoto', 'photo', media_file + '.jpg', link, post.url)
-            elif post.url.endswith('png'):
-                link = post.url
-                media_file = parse.urlparse(post.url).path
-                send_file('sendPhoto', 'photo', media_file + '.png', link, post.url)
+            if url.endswith(('jpg', 'jpeg')):
+                link = url
+                media_file = parse.urlparse(url).path
+                send_file('sendPhoto', 'photo', media_file + '.jpg', link, url, link, '<a href="%s">Reddit</a>' % post.permalink)
+            elif url.endswith('png'):
+                link = url
+                media_file = parse.urlparse(url).path
+                send_file('sendPhoto', 'photo', media_file + '.png', link, url, link, '<a href="%s">Reddit</a>' % post.permalink)
             else:
-                link = post.url.replace('gifv', 'mp4').replace('gif', 'mp4')
-                media_file = parse.urlparse(post.url).path
-                send_file('sendVideo', 'video', media_file + '.mp4', link, post.url)
-        elif 'imgur.com' in post.url:
-            if post.url.endswith('jpg'):
-                link = post.url
-                media_file = parse.urlparse(post.url).path
-                send_file('sendPhoto', 'photo', media_file + '.jpg', link, post.url)
-            elif post.url.endswith('png'):
-                link = post.url
-                media_file = parse.urlparse(post.url).path
-                send_file('sendPhoto', 'photo', media_file + '.png', link, post.url)
-            elif post.url.endswith('mp4') or post.url.endswith('gifv'):
-                link = post.url.replace('gifv', 'mp4').replace('gif', 'mp4')
-                media_file = parse.urlparse(post.url).path
-                send_file('sendVideo', 'video', media_file + '.mp4', link, post.url)
+                link = url.replace('gifv', 'mp4').replace('gif', 'mp4')
+                media_file = parse.urlparse(url).path
+                send_file('sendVideo', 'video', media_file + '.mp4', link, url, link, '<a href="%s">Reddit</a>' % post.permalink)
+        elif 'imgur.com' in url:
+            if url.endswith(('jpg', 'jpeg')):
+                link = url
+                media_file = parse.urlparse(url).path
+                send_file('sendPhoto', 'photo', media_file + '.jpg', link, url, link, '<a href="%s">Reddit</a>' % post.permalink)
+            elif url.endswith('png'):
+                link = url
+                media_file = parse.urlparse(url).path
+                send_file('sendPhoto', 'photo', media_file + '.png', link, url, link, '<a href="%s">Reddit</a>' % post.permalink)
+            elif url.endswith(('mp4', 'gifv')):
+                link = url.replace('gifv', 'mp4').replace('gif', 'mp4')
+                media_file = parse.urlparse(url).path
+                send_file('sendVideo', 'video', media_file + '.mp4', link, url, link, '<a href="%s">Reddit</a>' % post.permalink)
             else:
-                media_id = parse.urlparse(post.url)
+                media_id = parse.urlparse(url)
                 links = (('https://i.imgur.com' + media_id.path + '.mp4', '.mp4'), ('https://i.imgur.com' + media_id.path + '.png', '.png'), ('https://i.imgur.com' + media_id.path + '.jpeg', '.jpeg'))
                 for link, end in links:
                     response = requests.get(link)
                     content_type = response.headers.get('content-type')
                     if end[1:] in content_type:
                         if end[1:] == 'mp4':
-                            send_file('sendVideo', 'video', link + end, link, post.url)
+                            send_file('sendVideo', 'video', link + end, link, url, '<a href="%s">Reddit</a>' % post.permalink)
                             return
                         else:
-                            send_file('sendPhoto', 'photo', link + end, link, post.url)
+                            send_file('sendPhoto', 'photo', link + end.replace('.jpeg', '.jpg'), link, url, '<a href="%s">Reddit</a>' % post.permalink)
                             return
                 send_link(post)
-        elif 'gfycat.com' in post.url:
+        elif 'gfycat.com' in url:
+            url_clean = 'https://gfycat.com/' + url.replace('fr/', '').replace('pl/', '').replace('gifs/detail/', '').split('/')[3].replace('.webm', '').replace('.mp4', '').replace('-size_restricted.gif', '').replace('.gif', '')
             try:
-                url = post.url.replace('gifs/detail/', '')
-                link = requests.get('https://gfycat.com/cajax/get%s' % parse.urlparse(url).path).json()['gfyItem']['mp4Url']
-                media_file = parse.urlparse(url).path
-                send_file('sendVideo', 'video', media_file + '.mp4', link, url)
+                link = requests.get('https://gfycat.com/cajax/get%s' % parse.urlparse(url_clean).path).json()['gfyItem']['mp4Url']
+                media_file = parse.urlparse(url_clean).path
+                send_file('sendVideo', 'video', media_file + '.mp4', link, url, url_clean, post='<a href="%s">Reddit</a>' % post.permalink)
             except:
                 send_link(post)
         else:
@@ -169,9 +187,15 @@ def process_reddit(connect_reddit, subreddits, retries=0):
     for sub, limit in dict(subreddits).items():
         try:
             submissions = connect_reddit.get_subreddit(sub).get_hot(limit=limit)
-            for post in submissions:
-                if post.url not in lastlog:
-                    check_link(post)
+            try:
+                for post in submissions:
+                    if post.url.split('?')[0] not in lastlog:
+                        check_link(post)
+            except praw.errors.HTTPException:
+                sleep(10)
+                if retries < 5:
+                    retries += 1
+                    process_reddit(connect_reddit, subreddits, retries)
         except requests.exceptions.HTTPError:
             sleep(10)
             if retries < 5:
@@ -179,7 +203,7 @@ def process_reddit(connect_reddit, subreddits, retries=0):
                 process_reddit(connect_reddit, subreddits, retries)
 
 
-def process_twitter(arg, connect_twitter, twitter_account):
+def process_twitter(arg, connect_twitter, twitter_account, retries=0):
     with open('twitter_%s.json' % arg, 'r') as twitter_data:
         stored_data = dict()
         try:
@@ -187,7 +211,15 @@ def process_twitter(arg, connect_twitter, twitter_account):
         except json.decoder.JSONDecodeError:
             print('Twitter file corrupted, recreating. Please restart')
             return
-        for user in connect_twitter.friends_ids(twitter_account):
+        try:
+            twitter_ids = connect_twitter.friends_ids(twitter_account)
+        except tweepy.error.TweepError:
+            sleep(10)
+            if retries < 5:
+                retries += 1
+                twitter_ids = connect_twitter.friends_ids(twitter_account)
+
+        for user in twitter_ids:
             try:
                 tweets = connect_twitter.user_timeline(since_id=stored_data[str(user)], id=user)
                 for tweet in tweets:
@@ -208,11 +240,10 @@ def process_twitter(arg, connect_twitter, twitter_account):
                                 method = 'sendVideo'
                                 file = 'video'
                                 filename = media_file + '.mp4'
-                                variants = []
                                 for variant in media['video_info']['variants']:
                                     if variant['content_type'] == 'video/mp4':
                                         link = variant['url']
-                            send_file(method, file, filename, link, caption)
+                            send_file(method, file, filename, link, caption, caption)
             except:
                 # Twitter data has changed, creating new one
                 print('Twitter data has changed, creating new one')
